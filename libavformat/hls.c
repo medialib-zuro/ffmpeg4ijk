@@ -67,6 +67,7 @@ enum KeyType {
 };
 
 struct segment {
+    int ignored;
     int64_t previous_duration;
     int64_t duration;
     int64_t start_time;
@@ -875,7 +876,7 @@ static int parse_playlist(HLSContext *c, const char *url,
                     }
                     pls = c->playlists[c->n_playlists - 1];
                 }
-                seg = av_malloc(sizeof(struct segment));
+                seg = av_mallocz(sizeof(struct segment));
                 if (!seg) {
                     ret = AVERROR(ENOMEM);
                     goto fail;
@@ -964,7 +965,10 @@ fail:
 
 static struct segment *current_segment(struct playlist *pls)
 {
-    return pls->segments[pls->cur_seq_no - pls->start_seq_no];
+    int64_t n = pls->cur_seq_no - pls->start_seq_no;
+    if (n >= pls->n_segments)
+        return NULL;
+    return pls->segments[n];
 }
 
 static struct segment *next_segment(struct playlist *pls)
@@ -2138,6 +2142,7 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
                 int64_t pkt_ts;
                 int64_t ts_diff;
                 AVRational tb;
+                struct segment *seg = NULL;
                 ret = av_read_frame(pls->ctx, &pls->pkt);
                 if (ret < 0) {
                     //when error occur try to renew m3u8
@@ -2169,9 +2174,31 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
                     c->first_timestamp = s->start_time != AV_NOPTS_VALUE ? s->start_time : 0;
 
                 }
-
+                seg = current_segment(pls);
+                if (seg && seg->ignored) {
+                    av_packet_unref(&pls->pkt);
+                    continue;
+                }
+#if 0
                 if (pls->seek_timestamp == AV_NOPTS_VALUE)
                     break;
+#else /* VOD: 跳过异常时间戳 */
+                if (pls->seek_timestamp == AV_NOPTS_VALUE) {
+                    if (!(c->ctx->ctx_flags & AVFMTCTX_UNSEEKABLE) && AV_NOPTS_VALUE != c->cur_timestamp && AV_NOPTS_VALUE != pls->pkt.dts) {
+                       int64_t dts_timestamp = av_rescale_q(pls->pkt.dts, get_timebase(pls), AV_TIME_BASE_Q);
+                        if (abs(c->cur_timestamp - dts_timestamp) > 10 * AV_TIME_BASE) {
+                           if (seg) seg->ignored = 1;
+                           av_log(NULL, AV_LOG_INFO,
+                                  "  skip segment:%ld %d:%p index:%d dts:%ld cur:%ld \n",
+                                  pls->cur_seq_no - pls->start_seq_no, i, pls->ctx,
+                                  pls->pkt.stream_index, dts_timestamp, c->cur_timestamp);
+                           av_packet_unref(&pls->pkt);
+                           continue;
+                        }
+                     }
+                    break;
+                }
+#endif
 
                 if (pls->seek_stream_index < 0 ||
                     pls->seek_stream_index == pls->pkt.stream_index) {
