@@ -3637,11 +3637,11 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
 
     av_opt_set(ic, "skip_clear", "1", AV_OPT_SEARCH_CHILDREN);
 
-    max_stream_analyze_duration = max_analyze_duration;
-    max_subtitle_analyze_duration = max_analyze_duration;
-    if (!max_analyze_duration) {
-        max_stream_analyze_duration =
-        max_analyze_duration        = 5*AV_TIME_BASE;
+    // max_stream_analyze_duration = max_analyze_duration;
+    // max_subtitle_analyze_duration = max_analyze_duration;
+    // if (!max_analyze_duration) 
+    {
+        max_stream_analyze_duration = 5*AV_TIME_BASE;
         max_subtitle_analyze_duration = 30*AV_TIME_BASE;
         if (!strcmp(ic->iformat->name, "flv"))
             max_stream_analyze_duration = 90*AV_TIME_BASE;
