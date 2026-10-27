@@ -1345,7 +1345,7 @@ static int update_init_section(struct playlist *pls, struct segment *seg)
     av_fast_malloc(&pls->init_sec_buf, &pls->init_sec_buf_size, sec_size);
 
     ret = read_from_url(pls, seg->init_section, pls->init_sec_buf,
-                        pls->init_sec_buf_size, READ_COMPLETE);
+                        sec_size, READ_COMPLETE);
     ff_format_io_close(pls->parent, &pls->input);
 
     if (ret < 0)
@@ -2388,10 +2388,13 @@ static int hls_read_seek(AVFormatContext *s, int stream_index,
         pls->pb.eof_reached = 0;
         /* Clear any buffered data */
         pls->pb.buf_end = pls->pb.buf_ptr = pls->pb.buffer;
-        /* Reset the pos, to let the mpegts demuxer know we've seeked. */
+        /* Reset the pos, to let the mpegts/mov demuxer know we've seeked. */
         pls->pb.pos = 0;
         /* Flush the packet queue of the subdemuxer. */
         ff_read_frame_flush(pls->ctx);
+
+        /* Reset the init segment so it's re-fetched and served appropriately */
+        pls->cur_init_section = NULL;
 
         pls->seek_timestamp = seek_timestamp;
         pls->seek_flags = flags;
